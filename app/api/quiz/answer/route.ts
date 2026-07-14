@@ -1,0 +1,148 @@
+import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth/getSession";
+import { createClient } from "@/lib/supabase/server";
+import { selectNextQuestion, clampDifficulty } from "@/lib/quiz/adaptive";
+import { attachImageUrl } from "@/lib/quiz/image";
+import { gradeSubjectiveAnswer } from "@/lib/gemini/quizGrading";
+import { generateMultipleChoiceFeedback, generateConceptExplanation } from "@/lib/gemini/quizFeedback";
+import { GradingError } from "@/lib/gemini/grade";
+import type { QuizQuestion } from "@/lib/types/db";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+interface AnswerBody {
+  questionId: string;
+  submittedAnswer: string;
+  currentDifficulty: number;
+  attemptedIds?: string[]; // 이번 회차에 이미 푼 문항들 (현재 문항 포함) — 다음 문항 선정에서 제외
+}
+
+export async function POST(request: Request) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  if (session.profile.role !== "student") {
+    return NextResponse.json({ error: "학생만 문제를 풀 수 있습니다." }, { status: 403 });
+  }
+
+  const body = (await request.json().catch(() => null)) as AnswerBody | null;
+  if (!body?.questionId || typeof body.submittedAnswer !== "string" || !body.submittedAnswer.trim()) {
+    return NextResponse.json({ error: "답안을 입력해주세요." }, { status: 400 });
+  }
+
+  const supabase = await createClient();
+
+  // RLS: published + 본인 등록 클래스 문항만 조회됨
+  const { data: question } = await supabase
+    .from("quiz_questions")
+    .select("*")
+    .eq("id", body.questionId)
+    .maybeSingle<QuizQuestion>();
+
+  if (!question) {
+    return NextResponse.json({ error: "문제를 찾을 수 없거나 접근 권한이 없습니다." }, { status: 404 });
+  }
+
+  const currentDifficulty = clampDifficulty(Number(body.currentDifficulty) || question.difficulty);
+
+  let isCorrect: boolean;
+  let feedback: string;
+
+  try {
+    if (question.type === "multiple") {
+      isCorrect = body.submittedAnswer.trim() === question.answer.trim();
+      feedback = await generateMultipleChoiceFeedback({
+        questionContent: question.content,
+        options: question.options ?? [],
+        correctAnswer: question.answer,
+        studentAnswer: body.submittedAnswer,
+        isCorrect,
+      });
+    } else {
+      const graded = await gradeSubjectiveAnswer({
+        unit: question.unit,
+        questionContent: question.content,
+        modelAnswer: question.answer,
+        studentAnswer: body.submittedAnswer,
+      });
+      isCorrect = graded.is_correct;
+      feedback = graded.feedback;
+    }
+  } catch (err) {
+    const message = err instanceof GradingError ? err.message : "AI 채점 중 오류가 발생했습니다.";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
+
+  // 오답 개념 설명 캐시: 정답이면 캐시 삭제(다음에 또 틀리면 재생성), 오답이고 캐시가 없으면 1회 생성.
+  let conceptExplanation: string | null = null;
+  if (question.concept_keyword) {
+    if (isCorrect) {
+      await supabase
+        .from("quiz_concept_reviews")
+        .delete()
+        .eq("student_id", session.userId)
+        .eq("unit", question.unit)
+        .eq("keyword", question.concept_keyword);
+    } else {
+      const { data: cached } = await supabase
+        .from("quiz_concept_reviews")
+        .select("explanation")
+        .eq("student_id", session.userId)
+        .eq("unit", question.unit)
+        .eq("keyword", question.concept_keyword)
+        .maybeSingle();
+
+      if (cached) {
+        conceptExplanation = cached.explanation;
+      } else {
+        try {
+          conceptExplanation = await generateConceptExplanation(question.unit, question.concept_keyword);
+          await supabase.from("quiz_concept_reviews").insert({
+            student_id: session.userId,
+            class_id: question.class_id,
+            unit: question.unit,
+            keyword: question.concept_keyword,
+            explanation: conceptExplanation,
+          });
+        } catch {
+          conceptExplanation = null; // 개념 설명 생성 실패는 채점 자체를 막지 않는다
+        }
+      }
+    }
+  }
+
+  const nextDifficulty = clampDifficulty(currentDifficulty + (isCorrect ? 1 : -1));
+
+  // mastery 계산이 방금 이 시도를 반영하도록, 다음 문항을 고르기 전에 먼저 기록한다.
+  await supabase.from("quiz_attempts").insert({
+    question_id: question.id,
+    student_id: session.userId,
+    class_id: question.class_id,
+    submitted_answer: body.submittedAnswer,
+    is_correct: isCorrect,
+    difficulty_at_attempt: currentDifficulty,
+    ai_feedback: feedback,
+  });
+
+  // 이번 회차에 이미 푼 문항들(현재 문항 포함)을 제외한다.
+  const attemptedIds = Array.from(new Set([...(body.attemptedIds ?? []), question.id]));
+
+  const nextQuestion = await selectNextQuestion({
+    supabase,
+    classId: question.class_id,
+    unit: question.unit,
+    studentId: session.userId,
+    targetDifficulty: nextDifficulty,
+    attemptedIds,
+    conceptKeyword: question.concept_keyword,
+    wasWrong: !isCorrect,
+  });
+
+  return NextResponse.json({
+    isCorrect,
+    feedback,
+    nextDifficulty,
+    nextQuestion: await attachImageUrl(nextQuestion),
+    conceptExplanation,
+  });
+}
