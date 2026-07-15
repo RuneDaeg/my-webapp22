@@ -111,6 +111,22 @@ export type QuizQuestion = {
   created_at: string;
 };
 
+// 학생에게 노출되는 문항 (정답 answer 없음 — student_quiz_questions 뷰).
+// 클라이언트로 내려가는 문항은 반드시 이 타입을 쓴다. QuizQuestion(정답 포함)을 그대로 응답에 담지 말 것.
+export type StudentQuizQuestion = {
+  id: string;
+  class_id: string;
+  unit: string;
+  type: QuizQuestionType;
+  content: string;
+  options: string[] | null;
+  difficulty: number;
+  concept_keyword: string | null;
+  status: QuizQuestionStatus;
+  image_path: string | null;
+  created_at: string;
+};
+
 export type QuizAttempt = {
   id: string;
   question_id: string;
@@ -288,6 +304,7 @@ export type Database = {
     };
     Views: {
       student_grading_results: { Row: StudentGradingResultView; Relationships: Relationships };
+      student_quiz_questions: { Row: StudentQuizQuestion; Relationships: Relationships };
     };
     Functions: Record<string, never>;
   };

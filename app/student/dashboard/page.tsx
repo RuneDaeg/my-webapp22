@@ -62,10 +62,12 @@ export default async function StudentDashboardPage() {
     .eq("student_id", session.userId)
     .order("updated_at", { ascending: false });
 
-  // 선생님이 남긴 코멘트가 있는 풀이 (문항 내용도 함께)
+  // 선생님이 남긴 코멘트가 있는 풀이.
+  // [보안] 학생은 quiz_questions 테이블(정답 포함)을 직접 못 읽으므로 embed 대신 question_id만 받고,
+  // 문항 내용은 정답이 빠진 student_quiz_questions 뷰에서 따로 가져와 JS로 합친다.
   const { data: teacherNotes } = await supabase
     .from("quiz_attempts")
-    .select("id, teacher_feedback, created_at, class_id, quiz_questions(content, unit)")
+    .select("id, teacher_feedback, created_at, class_id, question_id")
     .eq("student_id", session.userId)
     .not("teacher_feedback", "is", null)
     .order("created_at", { ascending: false })
@@ -75,10 +77,17 @@ export default async function StudentDashboardPage() {
         teacher_feedback: string;
         created_at: string;
         class_id: string;
-        quiz_questions: { content: string; unit: string } | null;
+        question_id: string;
       }>,
       { merge: false }
     >();
+
+  const noteQuestionIds = Array.from(new Set((teacherNotes ?? []).map((n) => n.question_id)));
+  const { data: noteQuestions } =
+    noteQuestionIds.length > 0
+      ? await supabase.from("student_quiz_questions").select("id, content, unit").in("id", noteQuestionIds)
+      : { data: [] as Array<{ id: string; content: string; unit: string }> };
+  const questionById = new Map((noteQuestions ?? []).map((q) => [q.id, q]));
 
   return (
     <div className="space-y-6">
@@ -169,21 +178,24 @@ export default async function StudentDashboardPage() {
         <section className="space-y-2">
           <h2 className="text-lg font-semibold text-gray-900">문항별 선생님 피드백</h2>
           <div className="space-y-2">
-            {teacherNotes.map((n) => (
-              <div key={n.id} className="space-y-1 rounded-lg border border-blue-200 bg-blue-50 p-4">
-                <p className="text-xs text-blue-700">
-                  {classNameById.get(n.class_id) ?? "클래스"}
-                  {n.quiz_questions?.unit ? ` · ${n.quiz_questions.unit}` : ""}
-                </p>
-                {n.quiz_questions?.content && (
-                  <MathText
-                    text={n.quiz_questions.content.replace(/\n/g, " ").slice(0, 100)}
-                    className="block truncate text-xs text-blue-800"
-                  />
-                )}
-                <MathText text={n.teacher_feedback} className="block whitespace-pre-wrap text-sm text-blue-900" />
-              </div>
-            ))}
+            {teacherNotes.map((n) => {
+              const q = questionById.get(n.question_id);
+              return (
+                <div key={n.id} className="space-y-1 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                  <p className="text-xs text-blue-700">
+                    {classNameById.get(n.class_id) ?? "클래스"}
+                    {q?.unit ? ` · ${q.unit}` : ""}
+                  </p>
+                  {q?.content && (
+                    <MathText
+                      text={q.content.replace(/\n/g, " ").slice(0, 100)}
+                      className="block truncate text-xs text-blue-800"
+                    />
+                  )}
+                  <MathText text={n.teacher_feedback} className="block whitespace-pre-wrap text-sm text-blue-900" />
+                </div>
+              );
+            })}
           </div>
         </section>
       )}

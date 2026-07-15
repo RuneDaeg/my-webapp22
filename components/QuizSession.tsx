@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { QuizQuestion } from "@/lib/types/db";
+import type { StudentQuizQuestion } from "@/lib/types/db";
 import { parseJsonResponse } from "@/lib/fetchJson";
 import { MathText } from "@/components/MathText";
 
-type QuizQuestionWithImage = QuizQuestion & { imageUrl?: string | null };
+// 정답(answer)이 없는 타입 — 클라이언트로는 정답이 내려오지 않는다.
+type QuizQuestionWithImage = StudentQuizQuestion & { imageUrl?: string | null };
 
 interface AnswerResult {
   isCorrect: boolean;

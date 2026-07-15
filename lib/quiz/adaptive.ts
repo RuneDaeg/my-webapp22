@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, QuizQuestion } from "@/lib/types/db";
+import type { Database, StudentQuizQuestion } from "@/lib/types/db";
 
 type Client = SupabaseClient<Database>;
 
@@ -50,15 +50,16 @@ interface SelectNextQuestionInput {
 
 // 3단계 우선순위: (오답 시) 같은 개념 → 목표 난이도 일치 → 남은 문항 아무거나.
 // 후보에서 (1) 이미 마스터한 문항과 (2) 이번 회차에 이미 푼 문항을 모두 제외한다.
-export async function selectNextQuestion(input: SelectNextQuestionInput): Promise<QuizQuestion | null> {
+// [보안] 정답이 없는 student_quiz_questions 뷰에서 읽는다 — 여기서 고른 문항이 그대로 클라이언트로
+// 내려가므로 절대 quiz_questions 테이블(정답 포함)을 쓰면 안 된다.
+export async function selectNextQuestion(input: SelectNextQuestionInput): Promise<StudentQuizQuestion | null> {
   const { supabase, classId, unit, studentId, targetDifficulty, attemptedIds, conceptKeyword, wasWrong } = input;
 
   const { data: allQuestions } = await supabase
-    .from("quiz_questions")
+    .from("student_quiz_questions")
     .select("*")
     .eq("class_id", classId)
-    .eq("unit", unit)
-    .eq("status", "published");
+    .eq("unit", unit);
 
   const pool = allQuestions ?? [];
   if (pool.length === 0) return null;

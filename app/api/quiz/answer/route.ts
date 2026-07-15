@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/getSession";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { selectNextQuestion, clampDifficulty } from "@/lib/quiz/adaptive";
 import { attachImageUrl } from "@/lib/quiz/image";
 import { gradeSubjectiveAnswer } from "@/lib/gemini/quizGrading";
 import { generateMultipleChoiceFeedback, generateConceptExplanation } from "@/lib/gemini/quizFeedback";
 import { GradingError } from "@/lib/gemini/grade";
-import type { QuizQuestion } from "@/lib/types/db";
+import type { StudentQuizQuestion } from "@/lib/types/db";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -32,16 +33,25 @@ export async function POST(request: Request) {
 
   const supabase = await createClient();
 
-  // RLS: published + 본인 등록 클래스 문항만 조회됨
+  // 뷰가 published + 본인 등록 클래스로 제한한다 (정답은 포함되지 않음 = 접근 권한 검증도 겸함)
   const { data: question } = await supabase
-    .from("quiz_questions")
+    .from("student_quiz_questions")
     .select("*")
     .eq("id", body.questionId)
-    .maybeSingle<QuizQuestion>();
+    .maybeSingle<StudentQuizQuestion>();
 
   if (!question) {
     return NextResponse.json({ error: "문제를 찾을 수 없거나 접근 권한이 없습니다." }, { status: 404 });
   }
+
+  // [보안] 정답은 채점에만 쓰이며 절대 응답에 담기지 않는다. 위에서 접근 권한이 검증된 문항에 한해
+  // service-role로 정답만 서버에서 읽는다 (학생 세션으로는 정답을 읽을 수 없음).
+  const { data: answerRow } = await createAdminClient()
+    .from("quiz_questions")
+    .select("answer")
+    .eq("id", question.id)
+    .maybeSingle();
+  const correctAnswer = answerRow?.answer ?? "";
 
   const currentDifficulty = clampDifficulty(Number(body.currentDifficulty) || question.difficulty);
 
@@ -50,11 +60,11 @@ export async function POST(request: Request) {
 
   try {
     if (question.type === "multiple") {
-      isCorrect = body.submittedAnswer.trim() === question.answer.trim();
+      isCorrect = body.submittedAnswer.trim() === correctAnswer.trim();
       feedback = await generateMultipleChoiceFeedback({
         questionContent: question.content,
         options: question.options ?? [],
-        correctAnswer: question.answer,
+        correctAnswer,
         studentAnswer: body.submittedAnswer,
         isCorrect,
       });
@@ -62,7 +72,7 @@ export async function POST(request: Request) {
       const graded = await gradeSubjectiveAnswer({
         unit: question.unit,
         questionContent: question.content,
-        modelAnswer: question.answer,
+        modelAnswer: correctAnswer,
         studentAnswer: body.submittedAnswer,
       });
       isCorrect = graded.is_correct;
