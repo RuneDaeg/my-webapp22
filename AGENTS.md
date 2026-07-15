@@ -34,6 +34,12 @@ Google Gemini. 자세한 설정/실행 방법은 [README.md](README.md) 참고.
 
 - **코드를 수정하면 바로 프로덕션에 배포한다.** 사용자가 매번 로컬로 확인하는 게 느리다며 요청한
   방식 — 별도 확인 없이 변경 후 `npx vercel --prod` 실행.
+- **배포할 때 GitHub에도 함께 push한다** (사용자 요청). 즉 변경 후:
+  `npx vercel --prod` → `git add -A && git commit -m "..." && git push`.
+  원격: https://github.com/RuneDaeg/my-webapp22 (Private, 기본 브랜치 `main`).
+  git 사용자 정보는 이 저장소에 local로 설정돼 있고(`user.name=rune5`, `user.email=kmo4102@gmail.com`),
+  push 인증은 Git Credential Manager + `gh auth login`(RuneDaeg 계정)으로 이미 저장돼 있어 추가 입력 불필요.
+  `.env.local`은 `.gitignore`로 제외되니 절대 커밋되지 않게 유지한다.
 - 프로덕션 주소: https://my-webapp22.vercel.app (Vercel 프로젝트: `rune5/my-webapp22`)
 - 로컬/프로덕션이 **같은 Supabase 프로젝트**(DB 1개)를 공유한다 — 로컬에서 만든 테스트 계정/데이터가
   프로덕션에도 그대로 보인다.
