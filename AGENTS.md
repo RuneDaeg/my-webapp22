@@ -52,12 +52,12 @@ Google Gemini. 자세한 설정/실행 방법은 [README.md](README.md) 참고.
   `.env.local`에 `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`가 있어야 함. 마이그레이션 파일은
   새 번호로 계속 추가만 하고(`0001_...`, `0002_...`) 이미 적용된 파일은 수정하지 않는다.
 
-## 테스트 계정 (로컬/프로덕션 공용)
+## 테스트 계정
 
-- 관리자(admin): `admin-test01@mailinator.com` / `testpass1234`
-- 교사: `teacher-test01@mailinator.com` / `testpass1234`
-- 학생: `student-test01@mailinator.com` / `testpass1234`
-- 테스트 클래스 "3학년 2반 국어" (참여 코드 `6V4RMD`)
+저장소를 공개하면서 **로그인 가능한 실제 계정 정보는 문서에 두지 않는다**(로컬/프로덕션이 같은 DB를
+공유하므로 문서에 적힌 비밀번호가 곧 라이브 로그인 정보가 된다). 테스트가 필요하면 학생은 `/signup`으로
+직접 만들고, 교사·관리자는 [역할(role) 구조와 보안] 절차대로 발급/부트스트랩한다. 계정 이메일·비밀번호는
+커밋하지 말 것.
 
 ## 역할(role) 구조와 보안
 
