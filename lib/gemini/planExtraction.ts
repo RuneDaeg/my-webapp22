@@ -1,4 +1,5 @@
-import { getGeminiClient, GEMINI_MODEL } from "./client";
+import { runJson, withBackoff } from "@/lib/ai";
+import type { AiCredential, AiPart } from "@/lib/ai/types";
 import {
   planExtractionResponseSchema,
   planExtractionResultSchema,
@@ -72,34 +73,6 @@ const INSTRUCTIONS = `당신은 한국 초·중·고등학교 교사가 작성�
 
 반드시 주어진 JSON 스키마 배열 형식으로만 응답하고, 그 외 설명이나 markdown은 출력하지 마세요.`;
 
-async function callGemini(parts: Array<{ text: string } | { inlineData: { data: string; mimeType: string } }>) {
-  const ai = getGeminiClient();
-
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: parts,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: planExtractionResponseSchema,
-        },
-      });
-
-      const text = response.text;
-      if (!text) throw new GradingError("Gemini 응답이 비어 있습니다.");
-      return JSON.parse(text);
-    } catch (err) {
-      lastError = err;
-      const isRateLimit = err instanceof Error && /429|rate/i.test(err.message);
-      if (!isRateLimit || attempt === 1) break;
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    }
-  }
-  throw lastError instanceof Error ? lastError : new GradingError("Gemini 호출에 실패했습니다.");
-}
-
 interface ExtractFromPdfInput {
   pdfBuffer: Buffer;
 }
@@ -109,24 +82,30 @@ interface ExtractFromTextInput {
 }
 
 export async function extractEvaluationPlan(
+  cred: AiCredential,
   input: ExtractFromPdfInput | ExtractFromTextInput,
 ): Promise<PlanExtractionItem[]> {
-  const parts: Array<{ text: string } | { inlineData: { data: string; mimeType: string } }> =
+  const parts: AiPart[] =
     "pdfBuffer" in input
-      ? [{ inlineData: { data: input.pdfBuffer.toString("base64"), mimeType: "application/pdf" } }, { text: INSTRUCTIONS }]
+      ? [{ pdfBase64: input.pdfBuffer.toString("base64") }, { text: INSTRUCTIONS }]
       : [{ text: `${INSTRUCTIONS}\n\n[평가계획 문서 텍스트]\n${input.planText}` }];
 
-  let raw = await callGemini(parts);
+  const call = (extra?: string) =>
+    withBackoff(() =>
+      runJson(cred, {
+        parts: extra ? [...parts, { text: extra }] : parts,
+        geminiSchema: planExtractionResponseSchema,
+        maxOutputTokens: 16384,
+      }),
+    );
+
+  let raw = await call();
   let parsed = planExtractionResultSchema.safeParse(raw);
 
   if (!parsed.success) {
-    const retryParts = [
-      ...parts,
-      {
-        text: "[중요] 이전 응답이 요구된 JSON 배열 스키마와 맞지 않았습니다. 각 항목에 title, scoring_type, related_standards, evaluation_elements, scoring_criteria를 정확히 채워 배열로 다시 응답하세요.",
-      },
-    ];
-    raw = await callGemini(retryParts);
+    raw = await call(
+      "[중요] 이전 응답이 요구된 JSON 배열 스키마와 맞지 않았습니다. 각 항목에 title, scoring_type, related_standards, evaluation_elements, scoring_criteria를 정확히 채워 배열로 다시 응답하세요.",
+    );
     parsed = planExtractionResultSchema.safeParse(raw);
   }
 

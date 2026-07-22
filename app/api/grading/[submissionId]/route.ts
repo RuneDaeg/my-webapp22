@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { extractText, ExtractionError } from "@/lib/extraction";
 import { gradeSubmission, GradingError } from "@/lib/gemini/grade";
+import { getTeacherCredential, MissingCredentialError } from "@/lib/ai/credential";
 import type { Assignment } from "@/lib/types/db";
 
 export const runtime = "nodejs";
@@ -109,7 +110,9 @@ export async function POST(
       scoringType: assignment.scoring_type,
       criteriaText: criteria.criteria_text,
     };
+    const cred = await getTeacherCredential(session.profile.id);
     const { payload, rawResponse, modelName } = await gradeSubmission(
+      cred,
       pdfBuffer ? { ...baseInput, pdfBuffer } : { ...baseInput, submissionText: submissionText ?? "" },
     );
 

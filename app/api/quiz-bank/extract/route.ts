@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/getSession";
 import { extractQuestionsFromPdf } from "@/lib/gemini/questionExtraction";
 import { GradingError } from "@/lib/gemini/grade";
+import { getTeacherCredential, MissingCredentialError } from "@/lib/ai/credential";
 import { validateUploadedFile, FileValidationError } from "@/lib/validation/fileValidation";
 
 export const runtime = "nodejs";
@@ -41,9 +42,13 @@ export async function POST(request: Request) {
   const buffer = Buffer.from(await file.arrayBuffer());
 
   try {
-    const items = await extractQuestionsFromPdf(buffer);
+    const cred = await getTeacherCredential(session.profile.id);
+    const items = await extractQuestionsFromPdf(cred, buffer);
     return NextResponse.json({ items });
   } catch (err) {
+    if (err instanceof MissingCredentialError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     const message = err instanceof GradingError ? err.message : "문항 분석 중 오류가 발생했습니다.";
     return NextResponse.json({ error: message }, { status: 502 });
   }

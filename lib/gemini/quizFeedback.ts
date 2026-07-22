@@ -1,31 +1,11 @@
-import { getGeminiClient, GEMINI_MODEL } from "./client";
-import { GradingError } from "./grade";
+import { runText, withBackoff } from "@/lib/ai";
+import type { AiCredential } from "@/lib/ai/types";
 import type { ClassStats } from "@/lib/quiz/classStats";
 
-async function callGeminiText(prompt: string): Promise<string> {
-  const ai = getGeminiClient();
-
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: [{ text: prompt }],
-        // 짧은 피드백/개념 설명 생성은 추론이 필요 없다. 기본 thinking 모드를 끄지 않으면
-        // 호출당 수십 초씩 걸려 answer 라우트에서 두 번 호출 시 함수 제한(60초)을 넘겨 504가 난다.
-        config: { thinkingConfig: { thinkingBudget: 0 } },
-      });
-      const text = response.text?.trim();
-      if (!text) throw new GradingError("Gemini 응답이 비어 있습니다.");
-      return text;
-    } catch (err) {
-      lastError = err;
-      const isRateLimit = err instanceof Error && /429|rate/i.test(err.message);
-      if (!isRateLimit || attempt === 1) break;
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    }
-  }
-  throw lastError instanceof Error ? lastError : new GradingError("Gemini 호출에 실패했습니다.");
+// 짧은 피드백/개념 설명 생성은 추론이 필요 없다. Gemini는 thinking을 꺼서(0) 빠르게 하고,
+// 다른 제공사는 thinkingBudget을 무시한다.
+async function callText(cred: AiCredential, prompt: string, maxOutputTokens = 800): Promise<string> {
+  return withBackoff(() => runText(cred, { parts: [{ text: prompt }], thinkingBudget: 0, maxOutputTokens }));
 }
 
 interface MultipleChoiceFeedbackInput {
@@ -43,7 +23,10 @@ const STUDENT_TEXT_RULES = `[작성 규칙]
 - 마크다운 서식(**굵게**, ##제목, - 목록 등)을 절대 쓰지 말고 일반 문장으로 쓰세요.
 - 수식·기호는 $...$ 안에 LaTeX로 쓰세요 (예: $a = \\frac{F}{m}$).`;
 
-export async function generateMultipleChoiceFeedback(input: MultipleChoiceFeedbackInput): Promise<string> {
+export async function generateMultipleChoiceFeedback(
+  cred: AiCredential,
+  input: MultipleChoiceFeedbackInput,
+): Promise<string> {
   const common = `[문제]
 ${input.questionContent}
 
@@ -73,19 +56,27 @@ ${common}
   학생이 힌트를 바탕으로 스스로 다시 풀 수 있게만 안내하세요.
 ${STUDENT_TEXT_RULES}`;
 
-  return callGeminiText(prompt);
+  return callText(cred, prompt);
 }
 
-export async function generateConceptExplanation(unit: string, keyword: string): Promise<string> {
+export async function generateConceptExplanation(
+  cred: AiCredential,
+  unit: string,
+  keyword: string,
+): Promise<string> {
   const prompt = `단원 "${unit}"에서 "${keyword}" 개념을 고등학생이 이해하기 쉽게 설명해주세요.
 핵심 원리와 왜 중요한지, 자주 하는 실수를 포함해 3~4문장으로 작성하세요.
 ${STUDENT_TEXT_RULES}`;
 
-  return callGeminiText(prompt);
+  return callText(cred, prompt);
 }
 
 // 교사용: 클래스 전체의 개념별·유형별 통과율을 바탕으로 약점을 분석한다.
-export async function generateClassAnalysis(className: string, stats: ClassStats): Promise<string> {
+export async function generateClassAnalysis(
+  cred: AiCredential,
+  className: string,
+  stats: ClassStats,
+): Promise<string> {
   const fmt = (bs: ClassStats["concepts"]) =>
     bs.map((b) => `- ${b.label}: 통과율 ${b.rate}% (${b.correct}/${b.total})`).join("\n") || "- (데이터 없음)";
 
@@ -111,5 +102,5 @@ ${fmt(stats.difficulties)}
 - "~이다 / ~한다" 평서형 문어체로, 6~8문장 내외.
 - 마크다운 서식(**, ## 등) 없이 일반 문장으로. 수식은 $...$ 안에 LaTeX로.`;
 
-  return callGeminiText(prompt);
+  return callText(cred, prompt, 1500);
 }

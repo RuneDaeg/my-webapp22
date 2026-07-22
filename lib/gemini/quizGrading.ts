@@ -1,4 +1,5 @@
-import { getGeminiClient, GEMINI_MODEL } from "./client";
+import { runJson, withBackoff } from "@/lib/ai";
+import type { AiCredential } from "@/lib/ai/types";
 import { quizGradingResponseSchema, quizGradingResultSchema, type QuizGradingResultPayload } from "./quizGradingSchema";
 import { GradingError } from "./grade";
 
@@ -9,38 +10,8 @@ interface GradeSubjectiveAnswerInput {
   studentAnswer: string;
 }
 
-async function callGemini(prompt: string): Promise<unknown> {
-  const ai = getGeminiClient();
-
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: [{ text: prompt }],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: quizGradingResponseSchema,
-          // 기본 thinking 모드는 호출을 수십 초까지 늘려 함수 제한을 넘길 수 있다. 정오답 판단에
-          // 필요한 만큼만 작은 예산을 준다 (0으로 완전히 끄면 애매한 답안 판정이 부정확해질 수 있음).
-          thinkingConfig: { thinkingBudget: 512 },
-        },
-      });
-
-      const text = response.text;
-      if (!text) throw new GradingError("Gemini 응답이 비어 있습니다.");
-      return JSON.parse(text);
-    } catch (err) {
-      lastError = err;
-      const isRateLimit = err instanceof Error && /429|rate/i.test(err.message);
-      if (!isRateLimit || attempt === 1) break;
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    }
-  }
-  throw lastError instanceof Error ? lastError : new GradingError("Gemini 호출에 실패했습니다.");
-}
-
 export async function gradeSubjectiveAnswer(
+  cred: AiCredential,
   input: GradeSubjectiveAnswerInput,
 ): Promise<QuizGradingResultPayload> {
   const prompt = `당신은 학생의 서술형 답안을 채점하는 AI 튜터입니다. 단원: ${input.unit}
@@ -70,11 +41,15 @@ ${input.studentAnswer}
 - 마크다운 서식(**굵게**, ## 등)을 쓰지 말고 일반 문장으로.
 - 수식은 $...$ 안에 LaTeX로.`;
 
-  let raw = await callGemini(prompt);
+  // 정오답 판단에 약간의 추론이 필요해 thinkingBudget 512 (Gemini 전용; 타 제공사는 무시).
+  const call = (p: string) =>
+    withBackoff(() => runJson(cred, { parts: [{ text: p }], geminiSchema: quizGradingResponseSchema, thinkingBudget: 512 }));
+
+  let raw = await call(prompt);
   let parsed = quizGradingResultSchema.safeParse(raw);
 
   if (!parsed.success) {
-    raw = await callGemini(
+    raw = await call(
       `${prompt}\n\n[중요] 이전 응답이 요구된 JSON 스키마와 맞지 않았습니다. is_correct, feedback 필드를 정확히 채워 다시 응답하세요.`,
     );
     parsed = quizGradingResultSchema.safeParse(raw);

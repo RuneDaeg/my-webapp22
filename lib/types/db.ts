@@ -158,6 +158,14 @@ export type QuizClassAnalysis = {
   updated_at: string;
 };
 
+export type TeacherAiCredential = {
+  teacher_id: string;
+  provider: "gemini" | "openai" | "anthropic";
+  api_key: string;
+  model: string | null;
+  updated_at: string;
+};
+
 export type ClassAnnouncement = {
   id: string;
   class_id: string;
@@ -299,6 +307,12 @@ export type Database = {
         Row: QuizClassAnalysis;
         Insert: Partial<QuizClassAnalysis> & { class_id: string; signature: string; analysis: string };
         Update: Partial<QuizClassAnalysis>;
+        Relationships: Relationships;
+      };
+      teacher_ai_credentials: {
+        Row: TeacherAiCredential;
+        Insert: Partial<TeacherAiCredential> & { teacher_id: string; provider: string; api_key: string };
+        Update: Partial<TeacherAiCredential>;
         Relationships: Relationships;
       };
     };

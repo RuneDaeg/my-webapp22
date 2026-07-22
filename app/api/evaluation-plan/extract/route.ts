@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth/getSession";
 import { extractText, ExtractionError } from "@/lib/extraction";
 import { extractEvaluationPlan } from "@/lib/gemini/planExtraction";
 import { GradingError } from "@/lib/gemini/grade";
+import { getTeacherCredential, MissingCredentialError } from "@/lib/ai/credential";
 import { validateUploadedFile, FileValidationError } from "@/lib/validation/fileValidation";
 
 export const runtime = "nodejs";
@@ -41,13 +42,17 @@ export async function POST(request: Request) {
   const ext = file.name.toLowerCase().split(".").pop() ?? "";
 
   try {
+    const cred = await getTeacherCredential(session.profile.id);
     const items =
       ext === "pdf"
-        ? await extractEvaluationPlan({ pdfBuffer: buffer })
-        : await extractEvaluationPlan({ planText: await extractText(buffer, file.name, file.type) });
+        ? await extractEvaluationPlan(cred, { pdfBuffer: buffer })
+        : await extractEvaluationPlan(cred, { planText: await extractText(buffer, file.name, file.type) });
 
     return NextResponse.json({ items });
   } catch (err) {
+    if (err instanceof MissingCredentialError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     if (err instanceof ExtractionError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }

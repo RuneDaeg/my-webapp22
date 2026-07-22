@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { computeClassStats, statsSignature } from "@/lib/quiz/classStats";
 import { generateClassAnalysis } from "@/lib/gemini/quizFeedback";
 import { GradingError } from "@/lib/gemini/grade";
+import { getTeacherCredential, MissingCredentialError } from "@/lib/ai/credential";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -48,8 +49,12 @@ export async function POST(request: Request) {
 
   let analysis: string;
   try {
-    analysis = await generateClassAnalysis(cls.name, stats);
+    const cred = await getTeacherCredential(session.profile.id);
+    analysis = await generateClassAnalysis(cred, cls.name, stats);
   } catch (err) {
+    if (err instanceof MissingCredentialError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     const message = err instanceof GradingError ? err.message : "클래스 분석 생성 중 오류가 발생했습니다.";
     return NextResponse.json({ error: message }, { status: 502 });
   }

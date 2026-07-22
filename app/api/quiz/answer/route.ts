@@ -7,6 +7,7 @@ import { attachImageUrl } from "@/lib/quiz/image";
 import { gradeSubjectiveAnswer } from "@/lib/gemini/quizGrading";
 import { generateMultipleChoiceFeedback, generateConceptExplanation } from "@/lib/gemini/quizFeedback";
 import { GradingError } from "@/lib/gemini/grade";
+import { getTeacherCredential, MissingCredentialError } from "@/lib/ai/credential";
 import type { StudentQuizQuestion } from "@/lib/types/db";
 
 export const runtime = "nodejs";
@@ -48,10 +49,24 @@ export async function POST(request: Request) {
   // service-role로 정답만 서버에서 읽는다 (학생 세션으로는 정답을 읽을 수 없음).
   const { data: answerRow } = await createAdminClient()
     .from("quiz_questions")
-    .select("answer")
+    .select("answer, teacher_id")
     .eq("id", question.id)
     .maybeSingle();
   const correctAnswer = answerRow?.answer ?? "";
+
+  // 채점·피드백은 이 문제를 만든 교사의 AI 키로 수행한다(키 필수 정책). 학생에게는 교사에게 문의하라고 안내.
+  let cred;
+  try {
+    cred = await getTeacherCredential(answerRow?.teacher_id ?? "");
+  } catch (err) {
+    if (err instanceof MissingCredentialError) {
+      return NextResponse.json(
+        { error: "담당 선생님이 AI API 키를 설정하지 않아 채점할 수 없습니다. 선생님께 문의해주세요." },
+        { status: 503 },
+      );
+    }
+    throw err;
+  }
 
   const currentDifficulty = clampDifficulty(Number(body.currentDifficulty) || question.difficulty);
 
@@ -61,7 +76,7 @@ export async function POST(request: Request) {
   try {
     if (question.type === "multiple") {
       isCorrect = body.submittedAnswer.trim() === correctAnswer.trim();
-      feedback = await generateMultipleChoiceFeedback({
+      feedback = await generateMultipleChoiceFeedback(cred, {
         questionContent: question.content,
         options: question.options ?? [],
         correctAnswer,
@@ -69,7 +84,7 @@ export async function POST(request: Request) {
         isCorrect,
       });
     } else {
-      const graded = await gradeSubjectiveAnswer({
+      const graded = await gradeSubjectiveAnswer(cred, {
         unit: question.unit,
         questionContent: question.content,
         modelAnswer: correctAnswer,
@@ -106,7 +121,7 @@ export async function POST(request: Request) {
         conceptExplanation = cached.explanation;
       } else {
         try {
-          conceptExplanation = await generateConceptExplanation(question.unit, question.concept_keyword);
+          conceptExplanation = await generateConceptExplanation(cred, question.unit, question.concept_keyword);
           await supabase.from("quiz_concept_reviews").insert({
             student_id: session.userId,
             class_id: question.class_id,
