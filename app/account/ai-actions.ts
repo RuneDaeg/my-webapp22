@@ -3,6 +3,7 @@
 import { getSession } from "@/lib/auth/getSession";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runText } from "@/lib/ai";
+import { encryptApiKey } from "@/lib/ai/crypto";
 import { DEFAULT_MODEL, type AiProvider } from "@/lib/ai/types";
 
 const PROVIDERS: AiProvider[] = ["gemini", "openai", "anthropic"];
@@ -33,6 +34,14 @@ export async function saveAiCredentialAction(
   if (!key) return { ok: false, message: "API 키를 입력해주세요." };
   const modelName = model.trim() || DEFAULT_MODEL[prov];
 
+  // 저장은 암호문으로만 한다. 시크릿이 없으면 검증 호출을 하기 전에 바로 실패시킨다.
+  let encryptedKey: string;
+  try {
+    encryptedKey = encryptApiKey(key);
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "키 암호화에 실패했습니다." };
+  }
+
   // 검증용 최소 호출 — 아주 짧은 응답만 요청한다.
   try {
     await runText(
@@ -52,7 +61,7 @@ export async function saveAiCredentialAction(
     {
       teacher_id: session.profile.id,
       provider: prov,
-      api_key: key,
+      api_key: encryptedKey,
       model: modelName,
       updated_at: new Date().toISOString(),
     },

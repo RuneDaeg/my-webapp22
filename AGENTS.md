@@ -116,6 +116,12 @@ Google Gemini. 자세한 설정/실행 방법은 [README.md](README.md) 참고.
   필요 학생"은 교사가 읽을 수 있는 `quiz_attempts`에서 개념별 최신 시도가 오답인 개수로 직접 계산한다.
 - **이름 표시는 빈 문자열도 처리한다.** `display_name`이 `""`인 계정이 있어서 `?? "(이름 없음)"`은 빈 줄로
   렌더링됐다. `?.trim() || "(이름 없음)"`로 빈 문자열까지 걸러야 한다.
+- **교사 AI API 키는 DB에 평문으로 저장하지 않는다.** `lib/ai/crypto.ts`가 AES-256-GCM으로 암·복호화하고
+  (`"v1:<iv>:<tag>:<ciphertext>"` base64), 마스터 시크릿은 DB가 아니라 서버 환경변수
+  `AI_KEY_ENCRYPTION_SECRET`에 둔다 — Supabase 대시보드·DB 덤프·service_role 키만으로는 복원 불가.
+  암호화 지점은 `saveAiCredentialAction`(쓰기)과 `getTeacherCredential`(읽기) **두 곳뿐**이니 이 경로를
+  우회해 `teacher_ai_credentials.api_key`를 직접 읽거나 쓰지 말 것. 0016 이전 평문 행은 처음 사용될 때
+  `getTeacherCredential`이 암호문으로 자동 교체한다. 시크릿을 잃으면 전 교사가 키를 재등록해야 한다.
 - **비공개 Storage 객체(문항 그림 등)를 학생에게 보여줄 땐 접근 권한 확인 후 admin 클라이언트로 signed
   URL을 발급한다.** 학생은 교사 소유 `quiz-images` 객체에 storage RLS로 접근 못 하므로, 문항 조회 권한이
   RLS로 검증된 quiz API 안에서만 서명한다(`lib/quiz/image.ts`).

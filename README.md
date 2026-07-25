@@ -63,9 +63,15 @@ GitHub에서 이 저장소를 **Fork**(우측 상단 Fork 버튼)하거나, 코�
 - **OpenAI**: https://platform.openai.com/api-keys (기본값 `gpt-4o`)
 - **Anthropic Claude**: https://console.anthropic.com/ (기본값 `claude-sonnet-5`)
 
-키를 저장할 때 앱이 짧은 테스트 호출로 키·모델을 검증합니다. 키는 서버(`teacher_ai_credentials` 테이블)에만
-저장되고 화면에 다시 표시되지 않습니다. **실제 여러 명이 쓸 거라면 각 제공사에 결제(billing)를 연결**하는
-것을 권장합니다 — 무료 등급은 호출 한도가 낮아 PDF 채점을 몇 번 하면 금방 막힙니다.
+키를 저장할 때 앱이 짧은 테스트 호출로 키·모델을 검증합니다. 키는 서버(`teacher_ai_credentials` 테이블)에
+**AES-256-GCM으로 암호화되어** 저장되고 화면에 다시 표시되지 않습니다. 복호화 키는 DB가 아니라 서버
+환경변수(`AI_KEY_ENCRYPTION_SECRET`)에 있어서, Supabase 대시보드나 DB 백업만으로는 키를 읽을 수 없습니다.
+다만 **서버(Vercel) 환경변수까지 볼 수 있는 배포 운영자는 기술적으로 복호화가 가능**합니다 — 서버가 AI
+제공사를 호출하려면 평문 키가 필요하기 때문이며, 이는 API 키 방식의 구조적 한계입니다. 그래서 각 제공사
+콘솔에서 **사용량·예산 한도를 걸어두는 것**을 권장합니다.
+
+**실제 여러 명이 쓸 거라면 각 제공사에 결제(billing)를 연결**하는 것을 권장합니다 — 무료 등급은 호출
+한도가 낮아 PDF 채점을 몇 번 하면 금방 막힙니다.
 
 ## 4단계. Vercel에 배포
 
@@ -78,6 +84,15 @@ GitHub에서 이 저장소를 **Fork**(우측 상단 Fork 버튼)하거나, 코�
    | `NEXT_PUBLIC_SUPABASE_URL` | Supabase 프로젝트 URL |
    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon public 키 |
    | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service_role 키 (**비공개**, 서버 전용) |
+   | `AI_KEY_ENCRYPTION_SECRET` | 교사 AI 키 암호화용 시크릿 — 아래 명령으로 만들어 붙여넣습니다 |
+
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+   ```
+
+   > ⚠️ `AI_KEY_ENCRYPTION_SECRET`은 **따로 안전하게 백업**해 두세요. 이 값을 잃어버리면 저장된 교사
+   > API 키를 복호화할 수 없어 모든 교사가 키를 다시 등록해야 합니다. 그리고 이 값은 **Supabase에
+   > 넣으면 안 됩니다** — DB와 분리돼 있다는 점이 암호화의 핵심입니다.
 
 3. **Deploy**를 누르면 배포됩니다. 이후 나오는 주소(예: `https://내프로젝트.vercel.app`)가 접속 주소입니다.
 4. (선택) **리전 맞추기**: `vercel.json`의 `regions`가 `bom1`(뭄바이)로 되어 있습니다. Supabase 리전을
