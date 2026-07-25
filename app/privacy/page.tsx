@@ -131,7 +131,18 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>제출 파일은 비공개 저장소에 보관되며, 권한이 확인된 경우에만 한시적 링크로 열람됩니다.</li>
           <li>&quot;세부능력 및 특기사항&quot; 초안과 AI 채점 근거는 교사만 열람할 수 있고 학생에게 공개되지 않습니다.</li>
+          <li>
+            교사가 등록한 생성형 AI API 키는 AES-256-GCM으로 암호화해 저장하며, 복호화에 필요한 값은
+            데이터베이스와 분리된 서버 설정에 보관합니다. 데이터베이스 열람이나 백업만으로는 키를 복원할 수
+            없습니다.
+          </li>
         </ul>
+        <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <strong>한계 고지:</strong> AI 채점을 실행하려면 서버가 AI 제공사에 키 원본을 보내야 하므로,{" "}
+          <strong>이 서비스를 배포·운영하는 관리자는 기술적으로 교사의 AI API 키를 열람할 수 있습니다.</strong>{" "}
+          이는 API 키 방식의 구조적 한계이며 암호화로도 제거되지 않습니다. 교사는 각 제공사 콘솔에서 사용량·
+          예산 한도를 설정해 두시길 권장합니다.
+        </p>
       </section>
 
       <section className="space-y-2">
@@ -157,6 +168,9 @@ export default function PrivacyPolicyPage() {
 
       <section className="space-y-1 border-t border-gray-200 pt-4">
         <p className="text-xs text-gray-500">시행일: 2026년 7월 16일</p>
+        <p className="text-xs text-gray-500">
+          최종 개정: 2026년 7월 25일 (교사 AI API 키 암호화 저장 및 한계 고지 추가)
+        </p>
         <p className="text-xs text-gray-500">
           본 방침이 변경되는 경우 시행일과 변경 내용을 이 페이지에 공지합니다.
         </p>

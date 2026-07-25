@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { saveAiCredentialAction, clearAiCredentialAction } from "@/app/account/ai-actions";
-import { DEFAULT_MODEL, KEY_HINT, PROVIDER_LABEL, type AiProvider } from "@/lib/ai/types";
+import { BUDGET_HINT, DEFAULT_MODEL, KEY_HINT, PROVIDER_LABEL, type AiProvider } from "@/lib/ai/types";
 
 const PROVIDERS: AiProvider[] = ["gemini", "openai", "anthropic"];
 
@@ -136,6 +136,34 @@ export function AiCredentialForm({ hasKey, provider, model }: Props) {
             키 삭제
           </button>
         )}
+      </div>
+
+      {/* 키 보관 방식과 그 한계를 숨기지 않고 알린다 — 남의 서버에 자기 API 키를 맡기는 일이므로. */}
+      <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3 text-xs leading-relaxed text-gray-600">
+        <p>
+          입력한 키는 <strong className="font-medium text-gray-800">암호화되어 저장</strong>되며 화면에 다시
+          표시되지 않습니다. 복호화 키는 데이터베이스와 분리된 서버 설정에 보관되어, 데이터베이스 열람이나
+          백업만으로는 키를 복원할 수 없습니다.
+        </p>
+        <p>
+          다만 채점 시 AI 제공사를 호출하려면 서버가 키 원본을 사용해야 하므로,{" "}
+          <strong className="font-medium text-gray-800">이 서비스를 배포·운영하는 관리자는 기술적으로 키를
+          열람할 수 있습니다.</strong>{" "}
+          API 키 방식의 구조적 한계입니다. 그래서 제공사 콘솔에서{" "}
+          <strong className="font-medium text-gray-800">사용량·예산 한도를 걸어두시는 것</strong>을 권장합니다 —
+          만약의 경우 피해 상한이 됩니다.
+        </p>
+        <p>
+          {PROVIDER_LABEL[selProvider]} 한도 설정:{" "}
+          <a
+            href={BUDGET_HINT[selProvider].url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-gray-800 underline hover:text-gray-900"
+          >
+            {BUDGET_HINT[selProvider].path}
+          </a>
+        </p>
       </div>
     </form>
   );
