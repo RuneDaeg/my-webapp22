@@ -40,7 +40,9 @@ Google Gemini. 자세한 설정/실행 방법은 [README.md](README.md) 참고.
   git 사용자 정보는 이 저장소에 local로 설정돼 있고(`user.name=rune5`, `user.email=kmo4102@gmail.com`),
   push 인증은 Git Credential Manager + `gh auth login`(RuneDaeg 계정)으로 이미 저장돼 있어 추가 입력 불필요.
   `.env.local`은 `.gitignore`로 제외되니 절대 커밋되지 않게 유지한다.
-- 프로덕션 주소: https://my-webapp22.vercel.app (Vercel 프로젝트: `rune5/my-webapp22`)
+- 프로덕션 주소: https://cat-webapp.vercel.app (Vercel 프로젝트: `rune5/my-webapp22`)
+  — 프로젝트 이름과 도메인이 다르다. `my-webapp22.vercel.app`은 별칭이 아니라서 404다.
+  나머지 별칭: `my-webapp22-rune5.vercel.app`, `my-webapp22-runedaeg-rune5.vercel.app`.
 - 로컬/프로덕션이 **같은 Supabase 프로젝트**(DB 1개)를 공유한다 — 로컬에서 만든 테스트 계정/데이터가
   프로덕션에도 그대로 보인다.
 - Supabase 마이그레이션 적용:
