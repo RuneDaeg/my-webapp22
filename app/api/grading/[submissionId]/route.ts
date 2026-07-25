@@ -142,6 +142,9 @@ export async function POST(
 
     return NextResponse.json({ result });
   } catch (err) {
+    if (err instanceof MissingCredentialError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     const message = err instanceof GradingError ? err.message : "AI 채점 중 오류가 발생했습니다.";
     return NextResponse.json({ error: message }, { status: 502 });
   }
