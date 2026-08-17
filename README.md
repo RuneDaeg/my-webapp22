@@ -9,8 +9,8 @@ Next.js(App Router) + Supabase(Postgres/Auth/Storage) + Google Gemini API로 만
 
 ## 문서
 
-- 📖 [사용설명서](docs/사용설명서.md) — 관리자·교사·학생 역할별 사용 안내
-- 📝 [만든 방법과 철학](docs/만든-방법과-철학.md) — 개발 회고와 설계 원칙 ([English](docs/philosophy-and-approach.md))
+- 📖 [사용설명서](docs/user-guide.md) — 관리자·교사·학생 역할별 사용 안내
+- 📝 [만든 방법과 철학](docs/philosophy-ko.md) — 개발 회고와 설계 원칙 ([English](docs/philosophy-and-approach.md))
 
 ---
 

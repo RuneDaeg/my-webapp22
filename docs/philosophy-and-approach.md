@@ -1,5 +1,5 @@
-<!-- 한국어 원문: 만든-방법과-철학.md -->
-*Read in [한국어](만든-방법과-철학.md).*
+<!-- 한국어 원문: philosophy-ko.md -->
+*Read in [한국어](philosophy-ko.md).*
 
 # How I Built the Assignment Grading Assistant — Method and Philosophy
 
@@ -9,7 +9,7 @@
 This document is a record of the ideas the [Assignment Grading Assistant](../README.md) was built on, and
 of how a teacher who cannot write code himself saw this tool through to completion. It is not a feature
 manual, but a story about decisions and the reasons behind them. (For how to use the app, see the
-[User Guide](사용설명서.md).)
+[User Guide](user-guide.md).)
 
 ---
 
