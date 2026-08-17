@@ -7,6 +7,11 @@ AI 채점·피드백·"과목별 세부능력 및 특기사항" 초안을 생성
 
 Next.js(App Router) + Supabase(Postgres/Auth/Storage) + Google Gemini API로 만들어졌습니다.
 
+## 문서
+
+- 📖 [사용설명서](docs/사용설명서.md) — 관리자·교사·학생 역할별 사용 안내
+- 📝 [만든 방법과 철학](docs/만든-방법과-철학.md) — 개발 회고와 설계 원칙 ([English](docs/philosophy-and-approach.md))
+
 ---
 
 # 다른 선생님이 "자기 것"으로 배포하는 방법
